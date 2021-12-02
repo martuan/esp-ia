@@ -20,10 +20,10 @@ En el código es importante definir la cámara que usará el módulo, por lo tan
 
 Habilitar la cámara que posee el módulo y escribir las credenciales de acceso a la red Wifi (código resaltado )
 
-'''
 
-#include "esp_camera.h"
-#include <WiFi.h>
+
+`#include "esp_camera.h"
+#include <WiFi.h>`
 
 //
 // WARNING!!! PSRAM IC required for UXGA resolution and high JPEG quality
