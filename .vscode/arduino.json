@@ -1,0 +1,6 @@
+{
+    "configuration": "PartitionScheme=huge_app,FlashMode=qio,FlashFreq=80,UploadSpeed=921600,DebugLevel=none",
+    "board": "esp32:esp32:esp32wrover",
+    "sketch": "firmware/ESP32-CAM.ino",
+    "port": "/dev/ttyUSB0"
+}
