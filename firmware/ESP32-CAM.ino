@@ -270,6 +270,44 @@ uint8_t * psram_avi_ptr = 0;
 uint8_t * psram_idx_ptr = 0;
 char strftime_buf[64];
 
+char flagEnablePhoto1min = 0;
+char flagEnablePhoto5min = 0;
+char flagEnablePhoto60min = 0;
+char flagEnablePhotoLoop = 0;
+char flagProceso1 = 0;
+char flagProceso2 = 0;
+char flagProceso3 = 0;
+int contadorProceso1 = 0;
+int contadorProceso2 = 0;
+int contadorProceso3 = 0;
+hw_timer_t * timer3;
+int tiempo1 = 60;//60 segundos
+
+//timer de usos generales 1000ms
+void IRAM_ATTR onTimer3() {
+
+    contadorProceso1++;
+    contadorProceso2++;
+	contadorProceso3++;
+
+  if(contadorProceso1 == tiempo1){//proceso 1 (cada 60 segundos)
+      	contadorProceso1 = 0;//resetea el contador
+      	flagProceso1 = 1;
+  }
+	if(contadorProceso2 == tiempo1 * 5){//proceso 2 (cada 5 minutos)
+        contadorProceso2 = 0;//resetea el contador
+        flagProceso2 = 1;
+    }
+    if(contadorProceso3 == tiempo1 * 60){//proceso 3 (cada 60 minutos)
+        contadorProceso3 = 0;//resetea el contador
+        flagProceso3 = 1;//para chequear conexión con red wifi y broker
+    }
+
+    
+}
+
+
+
 
 void handleNewMessages(int numNewMessages) {
   //Serial.println("handleNewMessages");
@@ -373,46 +411,64 @@ void handleNewMessages(int numNewMessages) {
       delay(10);
     }
   }
-    if ( text == "/photo" || text == "/caption" ) {
+    if ( text == "/photo" || text == "/caption" || text == "/photo1min" || text == "/photo5min" || text == "/photo60min" || text == "/disablePhotoLoop") {
 
-      fb = NULL;
+		fb = NULL;
 
-      // Take Picture with Camera
-      fb = esp_camera_fb_get();
-      if (!fb) {
-        Serial.println("Camera capture failed");
-        bot.sendMessage(chat_id, "Camera capture failed", "");
-        return;
-      }
+		// Take Picture with Camera
+		fb = esp_camera_fb_get();
+		if (!fb) {
+			Serial.println("Camera capture failed");
+			bot.sendMessage(chat_id, "Camera capture failed", "");
+			return;
+		}
 
-      currentByte = 0;
-      fb_length = fb->len;
-      fb_buffer = fb->buf;
+		currentByte = 0;
+		fb_length = fb->len;
+		fb_buffer = fb->buf;
 
-      if (text == "/caption") {
+		if (text == "/caption") {
 
-        Serial.println("\n>>>>> Sending with a caption, bytes=  " + String(fb_length));
+			Serial.println("\n>>>>> Sending with a caption, bytes=  " + String(fb_length));
 
-        String sent = bot.sendMultipartFormDataToTelegramWithCaption("sendPhoto", "photo", "img.jpg",
-                      "image/jpeg", "Your photo", chat_id, fb_length,
-                      isMoreDataAvailable, getNextByte, nullptr, nullptr);
+			String sent = bot.sendMultipartFormDataToTelegramWithCaption("sendPhoto", "photo", "img.jpg",
+						"image/jpeg", "Your photo", chat_id, fb_length,
+						isMoreDataAvailable, getNextByte, nullptr, nullptr);
 
-        Serial.println("done!");
+			Serial.println("done!");
 
-      } else {
+		}else if(text == "/photo") {
 
-        Serial.println("\n>>>>> Sending, bytes=  " + String(fb_length));
+			Serial.println("\n>>>>> Sending, bytes=  " + String(fb_length));
 
-        bot.sendPhotoByBinary(chat_id, "image/jpeg", fb_length,
-                              isMoreDataAvailable, getNextByte,
-                              nullptr, nullptr);
+			bot.sendPhotoByBinary(chat_id, "image/jpeg", fb_length,
+								isMoreDataAvailable, getNextByte,
+								nullptr, nullptr);
 
-        dataAvailable = true;
+			dataAvailable = true;
 
-        Serial.println("done!");
-      }
-      esp_camera_fb_return(fb);
-    }
+			Serial.println("done!");
+			esp_camera_fb_return(fb);
+		}else if(text == "/photo1min"){//habilita sacar foto cada 1 minunto
+			flagEnablePhoto1min = 1;
+			Serial.println("/photo1min");
+			//flagEnablePhotoLoop = 1;
+		}else if(text == "/photo5min"){//habilita sacar foto cada 5 minuntos
+			flagEnablePhoto5min = 1;
+			Serial.println("/photo5min");
+			//flagEnablePhotoLoop = 1;
+		}else if(text == "/photo60min"){//habilita sacar foto cada 60 minuntos
+			flagEnablePhoto60min = 1;
+			Serial.println("/photo60min");
+			//flagEnablePhotoLoop = 1;
+		}else if(text == "/disablePhotoLoop"){//deshabilita todos los flags que permiten sacar fotos continuamente
+			flagEnablePhoto1min = 0;
+			flagEnablePhoto5min = 0;
+			flagEnablePhoto60min = 0;
+			Serial.println("PHOTO LOOP DISABLED");
+			//flagEnablePhotoLoop = 0;
+		}
+	}
 
     if (text == "/vga" ) {
 
@@ -462,6 +518,10 @@ void handleNewMessages(int numNewMessages) {
     if (text == "/start") {
       String welcome = "ESP32Cam Telegram bot.\n\n";
       welcome += "/photo: take a photo\n";
+	  welcome += "/photo1min: foto cada 1 minuto\n";
+	  welcome += "/photo5min: foto cada 5 minutos\n";
+	  welcome += "/photo60min: foto cada 60 minutos\n";
+	  welcome += "/disablePhotoLoop: corta loop de fotos\n";
       welcome += "/flash: toggle flash LED\n";
       welcome += "/caption: photo with caption\n";
       welcome += "/clip: short video clip\n";
@@ -476,6 +536,7 @@ void handleNewMessages(int numNewMessages) {
       welcome += "\n/status: status\n";
       welcome += "/reboot: reboot\n";
       welcome += "/start: start\n";
+
       bot.sendMessage(chat_id, welcome, "Markdown");
     }
   }
@@ -1030,6 +1091,11 @@ void setup() {
   Serial.printf("ESP32-CAM Video-Telegram %s\n", vernum);
   Serial.println("---------------------------------");
 
+	timer3 = timerBegin(2, 80, true);
+	timerAttachInterrupt(timer3, &onTimer3, true);
+	timerAlarmWrite(timer3, 1000000, true);//valor en microsegundos [1 s]
+	timerAlarmEnable(timer3);
+
   pinMode(FLASH_LED_PIN, OUTPUT);
   digitalWrite(FLASH_LED_PIN, flashState); //defaults to low
 
@@ -1141,6 +1207,22 @@ void loop() {
     }
     Bot_lasttime = millis();
   }
+
+  if(flagProceso1 == 1 && flagEnablePhoto1min == 1){
+	flagProceso1 = 0;
+	Serial.println("TAKING PHOTO (1 min)");
+	takePhoto();
+  }
+  if(flagProceso2 == 1 && flagEnablePhoto5min == 1){
+	flagProceso2 = 0;
+	Serial.println("TAKING PHOTO (5 min)");
+	takePhoto();
+  }
+  if(flagProceso3 == 1 && flagEnablePhoto60min == 1){
+	flagProceso3 = 0;
+	Serial.println("TAKING PHOTO (60 min)");
+	takePhoto();
+  }
 }
 
 
@@ -1192,5 +1274,38 @@ void logMemory(void) {
   long usedPSRAM = ESP.getPsramSize() - ESP.getFreePsram();
   Serial.println("Used PSRAM: " );
   Serial.println(usedPSRAM);
+
+}
+
+//saca una foto y la envía por Telegram
+void takePhoto(void){
+
+
+	fb = NULL;
+
+	// Take Picture with Camera
+	fb = esp_camera_fb_get();
+	if (!fb) {
+	Serial.println("Camera capture failed");
+	bot.sendMessage(chat_id, "Camera capture failed", "");
+	return;
+	}
+
+	currentByte = 0;
+	fb_length = fb->len;
+	fb_buffer = fb->buf;
+	
+
+	Serial.println("\n>>>>> Sending, bytes=  " + String(fb_length));
+
+	bot.sendPhotoByBinary(chat_id, "image/jpeg", fb_length,
+							isMoreDataAvailable, getNextByte,
+							nullptr, nullptr);
+
+	dataAvailable = true;
+
+	Serial.println("done!");
+	
+	esp_camera_fb_return(fb);
 
 }
