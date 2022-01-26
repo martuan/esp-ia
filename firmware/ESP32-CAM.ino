@@ -216,7 +216,9 @@ camera_fb_t * fb = NULL;
 camera_fb_t * vid_fb = NULL;
 
 TaskHandle_t the_camera_loop_task;
+//TaskHandle_t send_the_picture_task;
 void the_camera_loop (void* pvParameter) ;
+//void send_the_picture () ;
 static void IRAM_ATTR PIR_ISR(void* arg) ;
 
 bool video_ready = false;
@@ -998,10 +1000,10 @@ static void setupinterrupts() {
   }
   Serial.println(" ");
 
-  esp_err_t err = gpio_isr_handler_add((gpio_num_t)PIRpin, &PIR_ISR, NULL);
+  //esp_err_t err = gpio_isr_handler_add((gpio_num_t)PIRpin, &PIR_ISR, NULL);
 
-  if (err != ESP_OK) Serial.printf("gpio_isr_handler_add failed (%x)", err);
-  gpio_set_intr_type((gpio_num_t)PIRpin, GPIO_INTR_POSEDGE); 
+  //if (err != ESP_OK) Serial.printf("gpio_isr_handler_add failed (%x)", err);
+  //gpio_set_intr_type((gpio_num_t)PIRpin, GPIO_INTR_POSEDGE); 
 
 
 }
@@ -1019,13 +1021,17 @@ static void IRAM_ATTR PIR_ISR(void* arg) {
     if (!active_interupt && pir_enabled) {
       active_interupt = true;
       digitalWrite(33, HIGH);
-      Serial.print("PIR Interupt ... start recording ... ");
+      //Serial.print("PIR Interupt ... start recording ... ");
+	  Serial.println("PIR Interrupt ... taking photo ... ");
+	  takePhoto();
       xTaskCreatePinnedToCore( the_camera_loop, "the_camera_loop", 10000, NULL, 1, &the_camera_loop_task, 1);
+	  //xTaskCreatePinnedToCore( send_the_picture, "the_camera_loop", 10000, NULL, 1, &send_the_picture_task, 1);
       //xTaskCreatePinnedToCore( the_camera_loop, "the_camera_loop", 10000, NULL, 1, &the_camera_loop_task, 0);  //v8.5
-
+/*
       if ( the_camera_loop_task == NULL ) {
         Serial.printf("do_the_steaming_task failed to start! %d\n", the_camera_loop_task);
       }
+	  */
     }
   }
 }
@@ -1223,6 +1229,8 @@ void loop() {
 	Serial.println("TAKING PHOTO (60 min)");
 	takePhoto();
   }
+  
+  detectMovement();//Si el PIR detecta movimiento, saca foto
 }
 
 
@@ -1297,15 +1305,32 @@ void takePhoto(void){
 	
 
 	Serial.println("\n>>>>> Sending, bytes=  " + String(fb_length));
-
+	//Serial.println("llegó acá");
 	bot.sendPhotoByBinary(chat_id, "image/jpeg", fb_length,
 							isMoreDataAvailable, getNextByte,
 							nullptr, nullptr);
-
+	//Serial.println("llegó acá");
 	dataAvailable = true;
 
 	Serial.println("done!");
 	
 	esp_camera_fb_return(fb);
+	active_interupt = false;
 
+}
+
+void detectMovement(void){
+
+	int PIRstatus = digitalRead(PIRpin) + digitalRead(PIRpin) + digitalRead(PIRpin) ;
+  	if (PIRstatus == 3) {
+		Serial.print("PIR detected Movement>> "); Serial.println(PIRstatus);
+
+		if (pir_enabled) {
+		
+		digitalWrite(33, HIGH);
+		
+		Serial.println("PIR ->> taking photo ... ");
+		takePhoto();
+		}
+	}
 }
